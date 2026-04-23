@@ -22,17 +22,36 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const TAGS = ['Sick', 'Travel', 'Visitors', 'Night out'];
 
-const latencyColor = (min: number) => min <= 20 ? 'green' : min <= 35 ? 'amber' : 'red';
+const THEME = {
+  bg: '#0c0c0e',
+  surface: '#1c1c1e',
+  surfaceHigh: '#2c2c2e',
+  border: 'rgba(255,255,255,0.08)',
+  borderActive: 'rgba(255,255,255,0.22)',
+  textPrimary: '#ffffff',
+  textSecondary: 'rgba(255,255,255,0.45)',
+  textDisabled: 'rgba(255,255,255,0.15)',
+  green: '#30d158',
+  red: '#ff453a',
+  amber: '#ffd60a',
+};
 
-const COLORS = {
+type ColorKey = 'green' | 'amber' | 'red';
+
+const COLORS: Record<ColorKey, { bg: string; border: string; text: string }> = {
   green: { bg: '#0D3D2A', border: '#1D9E75', text: '#5DCAA5' },
   amber: { bg: '#3D2A05', border: '#EF9F27', text: '#FAC775' },
   red:   { bg: '#3D0D0D', border: '#E24B4A', text: '#F09595' },
 };
 
+const latencyColor = (min: number): ColorKey =>
+  min <= 20 ? 'green' : min <= 35 ? 'amber' : 'red';
+
 const calcLatency = (entry: BedtimeEntry) => {
   if (!entry.asleep_time) return null;
-  return Math.round((new Date(entry.asleep_time).getTime() - new Date(entry.lights_off_time).getTime()) / 60000);
+  return Math.round(
+    (new Date(entry.asleep_time).getTime() - new Date(entry.lights_off_time).getTime()) / 60000
+  );
 };
 
 const formatTime = (iso: string) =>
@@ -51,11 +70,9 @@ export default function HistoryScreen() {
   const [childId, setChildId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
   const [editLightsOff, setEditLightsOff] = useState('');
   const [editAsleep, setEditAsleep] = useState('');
   const [editTags, setEditTags] = useState<string[]>([]);
-
   const slideAnim = useRef(new Animated.Value(600)).current;
 
   useEffect(() => { initUser(); }, []);
@@ -64,7 +81,8 @@ export default function HistoryScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     setUserId(user.id);
-    const { data: children } = await supabase.from('children').select('*').eq('user_id', user.id).limit(1);
+    const { data: children } = await supabase
+      .from('children').select('*').eq('user_id', user.id).limit(1);
     if (children && children.length > 0) setChildId(children[0].id);
   };
 
@@ -114,12 +132,12 @@ export default function HistoryScreen() {
     });
   };
 
-  const toggleTag = (tag: string) => {
+  const toggleTag = (tag: string) =>
     setEditTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-  };
 
   const parseTimeToISO = (date: string, timeStr: string) => {
-    const [h, m] = timeStr.replace(/[ap]m/i, '').trim().split(':').map(Number);
+    const cleaned = timeStr.replace(/[ap]m/i, '').trim();
+    const [h, m] = cleaned.split(':').map(Number);
     const d = new Date(`${date}T00:00:00`);
     d.setHours(h, m, 0, 0);
     return d.toISOString();
@@ -139,15 +157,17 @@ export default function HistoryScreen() {
         asleep_time: asleepISO,
         tags: editTags,
       }, { onConflict: 'child_id,date' });
-      if (error) { Alert.alert('Error', error.message); }
+      if (error) Alert.alert('Error', error.message);
       else { await loadEntries(); closeSheet(); }
-    } catch { Alert.alert('Error', 'Invalid time format. Use HH:MM'); }
+    } catch {
+      Alert.alert('Error', 'Invalid time format. Use HH:MM');
+    }
     setSaving(false);
   };
 
   const deleteEntry = async () => {
     if (!selectedDay || !userId) return;
-    Alert.alert('Delete entry', 'Remove this night\'s data?', [
+    Alert.alert('Delete entry', "Remove this night's data?", [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await supabase.from('bedtime_entries').delete()
@@ -160,9 +180,16 @@ export default function HistoryScreen() {
 
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
-  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
-  const dateKey = (day: number) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const prevMonth = () => {
+    if (month === 0) { setMonth(11); setYear(y => y - 1); }
+    else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 11) { setMonth(0); setYear(y => y + 1); }
+    else setMonth(m => m + 1);
+  };
+  const dateKey = (day: number) =>
+    `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const todayKey = toLocalISODate();
 
   const cells: (number | null)[] = [];
@@ -172,11 +199,56 @@ export default function HistoryScreen() {
   const selectedEntry = selectedDay ? entries[selectedDay] : null;
   const selectedLatency = selectedEntry ? calcLatency(selectedEntry) : null;
 
+  // Stats
+  const allEntries = Object.values(entries);
+  const withLatency = allEntries.map(e => calcLatency(e)).filter((l): l is number => l !== null);
+  const avg = withLatency.length
+    ? Math.round(withLatency.reduce((a, b) => a + b, 0) / withLatency.length) : null;
+  const fastest = withLatency.length ? Math.min(...withLatency) : null;
+  const tagLatency: Record<string, number[]> = {};
+  allEntries.forEach(e => {
+    const l = calcLatency(e);
+    if (l === null) return;
+    (e.tags || []).forEach(tag => {
+      if (!tagLatency[tag]) tagLatency[tag] = [];
+      tagLatency[tag].push(l);
+    });
+  });
+  const worstTag = Object.entries(tagLatency)
+    .map(([tag, lats]) => ({ tag, avg: Math.round(lats.reduce((a, b) => a + b, 0) / lats.length) }))
+    .sort((a, b) => b.avg - a.avg)[0];
+
   return (
     <SafeAreaView style={s.container}>
       <ScrollView contentContainerStyle={s.scroll}>
+
         <Text style={s.heading}>History</Text>
 
+        {/* Stats bar */}
+        {withLatency.length > 0 && (
+          <View style={s.statsBar}>
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{avg !== null ? `${avg} min` : '—'}</Text>
+              <Text style={s.statLabel}>Average</Text>
+            </View>
+            <View style={s.statDivider} />
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{fastest !== null ? `${fastest} min` : '—'}</Text>
+              <Text style={s.statLabel}>Fastest</Text>
+            </View>
+            {worstTag && (
+              <>
+                <View style={s.statDivider} />
+                <View style={s.statItem}>
+                  <Text style={[s.statValue, { color: THEME.red }]}>{worstTag.tag}</Text>
+                  <Text style={s.statLabel}>Avoid tag</Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Month nav */}
         <View style={s.monthNav}>
           <TouchableOpacity onPress={prevMonth} style={s.navBtn}>
             <Text style={s.arrow}>‹</Text>
@@ -187,12 +259,14 @@ export default function HistoryScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Day headers */}
         <View style={s.dayHeaders}>
           {DAYS.map(d => <Text key={d} style={s.dayHeader}>{d}</Text>)}
         </View>
 
+        {/* Calendar grid */}
         {loading ? (
-          <ActivityIndicator color="#7f77dd" style={{ marginTop: 40 }} />
+          <ActivityIndicator color={THEME.textSecondary} style={{ marginTop: 40 }} />
         ) : (
           <View style={s.grid}>
             {cells.map((day, i) => {
@@ -203,20 +277,27 @@ export default function HistoryScreen() {
               const colorKey = latency !== null ? latencyColor(latency) : null;
               const color = colorKey ? COLORS[colorKey] : null;
               const isToday = key === todayKey;
-
               return (
                 <TouchableOpacity
                   key={key}
                   style={[
                     s.cell,
-                    color ? { backgroundColor: color.bg, borderColor: color.border, borderWidth: 1 } : isToday ? s.cellToday : s.cellEmpty2,
+                    color
+                      ? { backgroundColor: color.bg, borderColor: color.border, borderWidth: 1 }
+                      : isToday
+                        ? s.cellToday
+                        : s.cellDefault,
                   ]}
                   onPress={() => openSheet(key)}
                   activeOpacity={0.7}
                 >
                   <Text style={[
                     s.dayNum,
-                    color ? { color: color.text } : isToday ? { color: '#afa9ec' } : { color: '#555' }
+                    color
+                      ? { color: color.text }
+                      : isToday
+                        ? { color: THEME.textPrimary }
+                        : { color: THEME.textSecondary }
                   ]}>
                     {day}
                   </Text>
@@ -226,11 +307,14 @@ export default function HistoryScreen() {
           </View>
         )}
 
+        {/* Legend */}
         <View style={s.legend}>
-          {([['green', '≤20 min'], ['amber', '21–35 min'], ['red', '35+ min']] as [keyof typeof COLORS, string][]).map(([key, label]) => (
-            <View key={label} style={s.legendItem}>
+          {(['green', 'amber', 'red'] as ColorKey[]).map((key) => (
+            <View key={key} style={s.legendItem}>
               <View style={[s.legendDot, { backgroundColor: COLORS[key].border }]} />
-              <Text style={s.legendText}>{label}</Text>
+              <Text style={s.legendText}>
+                {key === 'green' ? '≤20 min' : key === 'amber' ? '21–35 min' : '35+ min'}
+              </Text>
             </View>
           ))}
         </View>
@@ -238,77 +322,81 @@ export default function HistoryScreen() {
         <Text style={s.hint}>Tap any day to add or edit</Text>
       </ScrollView>
 
+      {/* Bottom Sheet */}
       <Modal visible={sheetVisible} transparent animationType="none" onRequestClose={closeSheet}>
         <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={closeSheet} />
         <KeyboardAvoidingView
-  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-  style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}
-  >
-        <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
-          <View style={s.sheetHandle} />
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}
+        >
+          <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
+            <View style={s.sheetHandle} />
 
-          <View style={s.sheetHeader}>
-            <Text style={s.sheetDate}>
-              {selectedDay ? new Date(selectedDay + 'T12:00:00').toLocaleDateString([], {
-                weekday: 'long', month: 'long', day: 'numeric'
-              }) : ''}
-            </Text>
-            {selectedEntry && (
-              <TouchableOpacity onPress={deleteEntry}>
-                <Text style={s.deleteText}>Delete</Text>
-              </TouchableOpacity>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetDate}>
+                {selectedDay
+                  ? new Date(selectedDay + 'T12:00:00').toLocaleDateString([], {
+                      weekday: 'long', month: 'long', day: 'numeric'
+                    })
+                  : ''}
+              </Text>
+              {selectedEntry && (
+                <TouchableOpacity onPress={deleteEntry}>
+                  <Text style={s.deleteText}>Delete</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {selectedLatency !== null && (
+              <View style={s.resultRow}>
+                <Text style={s.resultNum}>{selectedLatency}</Text>
+                <Text style={s.resultUnit}> min to fall asleep</Text>
+              </View>
             )}
-          </View>
 
-          {selectedLatency !== null && (
-            <View style={s.sheetResult}>
-              <Text style={s.sheetResultNum}>{selectedLatency} min</Text>
-              <Text style={s.sheetResultLabel}>to fall asleep</Text>
+            <View style={s.timeRows}>
+              <View style={s.timeRow}>
+                <Text style={s.timeRowLabel}>Lights off</Text>
+                <TextInput
+                  style={s.timeInput}
+                  value={editLightsOff}
+                  onChangeText={setEditLightsOff}
+                  placeholder="e.g. 19:30"
+                  placeholderTextColor={THEME.textDisabled}
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+              <View style={[s.timeRow, { borderBottomWidth: 0 }]}>
+                <Text style={s.timeRowLabel}>Asleep</Text>
+                <TextInput
+                  style={s.timeInput}
+                  value={editAsleep}
+                  onChangeText={setEditAsleep}
+                  placeholder="e.g. 19:52"
+                  placeholderTextColor={THEME.textDisabled}
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
             </View>
-          )}
 
-          <View style={s.sheetFields}>
-            <View style={s.fieldRow}>
-              <Text style={s.fieldLabel}>Lights off</Text>
-              <TextInput
-                style={s.fieldInput}
-                value={editLightsOff}
-                onChangeText={setEditLightsOff}
-                placeholder="e.g. 19:30"
-                placeholderTextColor="#444"
-                keyboardType="numbers-and-punctuation"
-              />
+            <Text style={s.tagsLabel}>Events</Text>
+            <View style={s.tagRow}>
+              {TAGS.map(tag => (
+                <TouchableOpacity
+                  key={tag}
+                  style={[s.tag, editTags.includes(tag) && s.tagActive]}
+                  onPress={() => toggleTag(tag)}
+                >
+                  {editTags.includes(tag) && <Text style={s.tagCheck}>✓ </Text>}
+                  <Text style={[s.tagText, editTags.includes(tag) && s.tagTextActive]}>{tag}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            <View style={[s.fieldRow, { borderBottomWidth: 0 }]}>
-              <Text style={s.fieldLabel}>Asleep</Text>
-              <TextInput
-                style={s.fieldInput}
-                value={editAsleep}
-                onChangeText={setEditAsleep}
-                placeholder="e.g. 19:52"
-                placeholderTextColor="#444"
-                keyboardType="numbers-and-punctuation"
-              />
-            </View>
-          </View>
 
-          <Text style={s.tagsLabel}>Tags</Text>
-          <View style={s.tagRow}>
-            {TAGS.map(tag => (
-              <TouchableOpacity
-                key={tag}
-                style={[s.tag, editTags.includes(tag) && s.tagActive]}
-                onPress={() => toggleTag(tag)}
-              >
-                <Text style={[s.tagText, editTags.includes(tag) && s.tagTextActive]}>{tag}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <TouchableOpacity style={s.saveBtn} onPress={saveSheet} disabled={saving}>
-            <Text style={s.saveBtnText}>{saving ? 'Saving...' : selectedEntry ? 'Update' : 'Save night'}</Text>
-          </TouchableOpacity>
-        </Animated.View>
+            <TouchableOpacity style={s.saveBtn} onPress={saveSheet} disabled={saving}>
+              <Text style={s.saveBtnText}>{saving ? 'Saving...' : selectedEntry ? 'Update' : 'Save night'}</Text>
+            </TouchableOpacity>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
@@ -316,69 +404,65 @@ export default function HistoryScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f14' },
+  container: { flex: 1, backgroundColor: THEME.bg },
   scroll: { padding: 24, paddingTop: 48, paddingBottom: 60 },
-  heading: { fontSize: 34, fontWeight: '700', color: '#fff', marginBottom: 24 },
+  heading: { fontSize: 34, fontWeight: '700', color: THEME.textPrimary, marginBottom: 20 },
+
+  statsBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 32, paddingVertical: 4 },
+  statItem: { flex: 1 },
+  statValue: { fontSize: 20, fontWeight: '700', color: THEME.textPrimary, marginBottom: 4 },
+  statLabel: { fontSize: 13, color: THEME.textSecondary },
+  statDivider: { width: 0.5, height: 36, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: 16 },
+
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   navBtn: { padding: 8 },
-  arrow: { fontSize: 32, color: '#afa9ec', lineHeight: 36 },
-  monthLabel: { fontSize: 18, fontWeight: '600', color: '#fff' },
+  arrow: { fontSize: 32, color: THEME.textSecondary, lineHeight: 36 },
+  monthLabel: { fontSize: 17, fontWeight: '600', color: THEME.textPrimary },
+
   dayHeaders: { flexDirection: 'row', marginBottom: 8 },
-  dayHeader: { flex: 1, textAlign: 'center', fontSize: 11, color: '#444', fontWeight: '600', textTransform: 'uppercase' },
+  dayHeader: { flex: 1, textAlign: 'center', fontSize: 11, color: THEME.textDisabled, fontWeight: '600', textTransform: 'uppercase' },
+
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-cell: {
-  width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center',
-  borderRadius: 12, padding: 2,
-},
-cellEmpty: { width: '14.28%', aspectRatio: 1 },
-cellEmpty2: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
-  cellToday: { borderWidth: 1, borderColor: '#7f77dd', backgroundColor: '#1a1a2e' },
-  dayNum: { fontSize: 15, fontWeight: '600' },
+  cell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12, padding: 2 },
+  cellEmpty: { width: '14.28%', aspectRatio: 1 },
+  cellDefault: { },
+  cellToday: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: THEME.surface },
+  dayNum: { fontSize: 15, fontWeight: '500' },
+
   legend: { flexDirection: 'row', gap: 16, marginTop: 20, marginBottom: 8, justifyContent: 'center' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 12, color: '#555' },
-  hint: { textAlign: 'center', color: '#333', fontSize: 13, marginTop: 8 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 12, color: THEME.textSecondary },
+  hint: { textAlign: 'center', color: THEME.textDisabled, fontSize: 13, marginTop: 8 },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {
-    backgroundColor: '#16161f',
+    backgroundColor: THEME.surface,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 24, paddingBottom: 48,
   },
-  sheetHandle: {
-    width: 40, height: 4, backgroundColor: '#333',
-    borderRadius: 2, alignSelf: 'center', marginBottom: 20,
-  },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  sheetDate: { fontSize: 17, fontWeight: '600', color: '#fff' },
-  deleteText: { fontSize: 14, color: '#e24b4a' },
-  sheetResult: {
-    backgroundColor: '#1a1a2e', borderRadius: 12, padding: 16,
-    alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#2a2a3e',
-  },
-  sheetResultNum: { fontSize: 36, fontWeight: '700', color: '#afa9ec' },
-  sheetResultLabel: { fontSize: 13, color: '#666', marginTop: 2 },
-  sheetFields: {
-    backgroundColor: '#1a1a2e', borderRadius: 12,
-    borderWidth: 1, borderColor: '#2a2a3e', marginBottom: 20,
-  },
-  fieldRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#2a2a3e',
-  },
-  fieldLabel: { fontSize: 15, color: '#888' },
-  fieldInput: {
-    fontSize: 15, fontWeight: '600', color: '#fff',
-    textAlign: 'right', minWidth: 80,
-  },
-  tagsLabel: { fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+  sheetHandle: { width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sheetDate: { fontSize: 17, fontWeight: '600', color: THEME.textPrimary },
+  deleteText: { fontSize: 14, color: THEME.red },
+
+  resultRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 20 },
+  resultNum: { fontSize: 48, fontWeight: '700', color: THEME.textPrimary, letterSpacing: -2 },
+  resultUnit: { fontSize: 18, color: THEME.textSecondary, marginLeft: 4 },
+
+  timeRows: { backgroundColor: THEME.surfaceHigh, borderRadius: 14, marginBottom: 20 },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  timeRowLabel: { fontSize: 15, color: THEME.textSecondary },
+  timeInput: { fontSize: 15, fontWeight: '600', color: THEME.textPrimary, textAlign: 'right', minWidth: 80 },
+
+  tagsLabel: { fontSize: 12, color: THEME.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-  tag: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#2a2a3e' },
-  tagActive: { backgroundColor: '#26215c', borderColor: '#7f77dd' },
-  tagText: { fontSize: 14, color: '#555' },
-  tagTextActive: { color: '#afa9ec' },
-  saveBtn: { backgroundColor: '#7f77dd', borderRadius: 14, padding: 16, alignItems: 'center' },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  tag: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  tagActive: { backgroundColor: THEME.green, borderColor: THEME.green },
+  tagCheck: { fontSize: 13, color: '#000', fontWeight: '700' },
+  tagText: { fontSize: 14, color: THEME.textSecondary },
+  tagTextActive: { color: '#000', fontWeight: '600' },
+
+  saveBtn: { backgroundColor: THEME.textPrimary, borderRadius: 14, padding: 16, alignItems: 'center' },
+  saveBtnText: { color: '#000', fontSize: 16, fontWeight: '700' },
 });
