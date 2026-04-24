@@ -130,18 +130,17 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* About */}
-        <Text style={s.sectionLabel}>About</Text>
-        <View style={s.aboutSection}>
-          <Text style={s.aboutVersion}>Version 1.0.0</Text>
-          <Text style={s.aboutTagline}>Built for tired parents everywhere</Text>
-        </View>
-
         {/* Sign out */}
         <TouchableOpacity style={s.signOutBtn} onPress={signOut}>
           <Text style={s.signOutText}>Sign out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+        {/* About */}
+        <View style={s.aboutSection}>
+          <Text style={s.aboutVersion}>Version 1.0.0</Text>
+          <Text style={s.aboutTagline}>Built for tired parents</Text>
+        </View>
 
       {/* Change Password Sheet */}
       <Modal visible={pwSheetVisible} transparent animationType="none" onRequestClose={closePwSheet}>

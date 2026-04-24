@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Dimensions,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,6 +20,8 @@ import { formatTimeInput } from '../../lib/inputFormatters';
 import { supabase } from '../../lib/supabase';
 import tokens from '../../lib/tokens';
 import { BedtimeEntry } from '../../lib/types';
+
+const CELL_SIZE = Math.floor((Dimensions.get('window').width - 48) / 7);
 
 const t = tokens.semantic.dark;
 const { spacing, radius, fontSize, fontWeight, motion, component } = tokens;
@@ -262,7 +265,7 @@ export default function HistoryScreen() {
         ) : (
           <View style={s.grid}>
             {cells.map((day, i) => {
-              if (!day) return <View key={`e-${i}`} style={s.cellEmpty} />;
+              if (!day) return <View key={`e-${i}`} style={[s.cellEmpty, { width: CELL_SIZE, height: CELL_SIZE }]} />;
               const key = dateKey(day);
               const entry = entries[key];
               const latency = entry ? calcLatency(entry) : null;
@@ -271,16 +274,17 @@ export default function HistoryScreen() {
               const isToday = key === todayKey;
               return (
                 <TouchableOpacity
-                  key={key}
-                  style={[
-                    s.cell,
-                    color
-                      ? { backgroundColor: color.bg, borderColor: color.border, borderWidth: 1 }
-                      : isToday ? s.cellToday : s.cellDefault,
-                  ]}
-                  onPress={() => openSheet(key)}
-                  activeOpacity={0.7}
-                >
+  key={key}
+  style={[
+    s.cell,
+    { width: CELL_SIZE, height: CELL_SIZE },
+    color
+      ? { backgroundColor: color.bg, borderColor: color.border, borderWidth: 1 }
+      : isToday ? s.cellToday : s.cellDefault,
+  ]}
+  onPress={() => openSheet(key)}
+  activeOpacity={0.7}
+>
                   <Text style={[
                     s.dayNum,
                     color
@@ -443,10 +447,11 @@ cell: {
   alignItems: 'center', justifyContent: 'center',
   borderRadius: radius.md,
 },
-  cellEmpty: { width: '14.28%', aspectRatio: 1 },
-  cellDefault: {},
-  cellToday: { borderWidth: 1, borderColor: t.border, backgroundColor: t.bgCard },
-  dayNum: { fontSize: fontSize.base, fontWeight: String(fontWeight.medium) as any },
+cell: {
+  alignItems: 'center', justifyContent: 'center',
+  borderRadius: radius.md,
+},
+cellEmpty: {},
 
   legend: {
     flexDirection: 'row', gap: spacing[4],
