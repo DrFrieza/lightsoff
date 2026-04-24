@@ -22,8 +22,7 @@ const { spacing, radius, fontSize, fontWeight, component, motion } = tokens;
 
 export default function SettingsScreen() {
   const [email, setEmail] = useState('');
-  const [optimalMin, setOptimalMin] = useState('15');
-  const [optimalMax, setOptimalMax] = useState('25');
+  const [optimalMax, setOptimalMax] = useState('20');
   const [pwSheetVisible, setPwSheetVisible] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -94,7 +93,10 @@ export default function SettingsScreen() {
             <Text style={s.rowLabel}>Email</Text>
             <Text style={s.rowValue} numberOfLines={1}>{email}</Text>
           </View>
-          <TouchableOpacity style={[s.row, { borderBottomWidth: 0 }]} onPress={openPwSheet}>
+          <TouchableOpacity
+            style={[s.row, { borderBottomWidth: 0 }]}
+            onPress={openPwSheet}
+          >
             <Text style={s.rowLabel}>Change password</Text>
             <Text style={s.rowChevron}>›</Text>
           </TouchableOpacity>
@@ -105,26 +107,18 @@ export default function SettingsScreen() {
         <View style={s.group}>
           <View style={s.row}>
             <View style={s.rowLabelGroup}>
-              <Text style={s.rowLabel}>Optimal range</Text>
-              <Text style={s.rowSubLabel}>Minutes to fall asleep</Text>
+              <Text style={s.rowLabel}>Optimal sleep time</Text>
+              <Text style={s.rowSubLabel}>Minutes or less is considered great</Text>
             </View>
-            <View style={s.rangeInputs}>
+            <View style={s.optimalInputWrap}>
               <TextInput
-                style={s.rangeInput}
-                value={optimalMin}
-                onChangeText={setOptimalMin}
-                keyboardType="number-pad"
-                maxLength={2}
-              />
-              <Text style={s.rangeDash}>–</Text>
-              <TextInput
-                style={s.rangeInput}
+                style={s.optimalInput}
                 value={optimalMax}
                 onChangeText={setOptimalMax}
                 keyboardType="number-pad"
                 maxLength={2}
               />
-              <Text style={s.rangeUnit}>min</Text>
+              <Text style={s.optimalUnit}>min</Text>
             </View>
           </View>
           <View style={[s.row, { borderBottomWidth: 0, opacity: 0.4 }]}>
@@ -138,23 +132,15 @@ export default function SettingsScreen() {
 
         {/* About */}
         <Text style={s.sectionLabel}>About</Text>
-        <View style={s.group}>
-          <View style={s.row}>
-            <Text style={s.rowLabel}>Version</Text>
-            <Text style={s.rowValue}>1.0.0</Text>
-          </View>
-          <View style={[s.row, { borderBottomWidth: 0 }]}>
-            <Text style={[s.rowValue, { color: t.textMuted, fontSize: fontSize.sm }]}>
-              Built for tired parents everywhere 🌙
-            </Text>
-          </View>
+        <View style={s.aboutSection}>
+          <Text style={s.aboutVersion}>Version 1.0.0</Text>
+          <Text style={s.aboutTagline}>Built for tired parents everywhere</Text>
         </View>
 
         {/* Sign out */}
         <TouchableOpacity style={s.signOutBtn} onPress={signOut}>
           <Text style={s.signOutText}>Sign out</Text>
         </TouchableOpacity>
-
       </ScrollView>
 
       {/* Change Password Sheet */}
@@ -227,8 +213,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: t.bg },
   scroll: { padding: spacing[6], paddingTop: spacing[12], paddingBottom: spacing[14] },
   heading: {
-    fontSize: fontSize['4xl'],
-    fontWeight: String(fontWeight.bold) as any,
+    fontSize: fontSize['4xl'], fontWeight: String(fontWeight.bold) as any,
     color: t.textPrimary, marginBottom: spacing[6],
   },
 
@@ -246,22 +231,25 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing[5], paddingVertical: spacing[4],
     borderBottomWidth: 0.5, borderBottomColor: t.divider,
   },
-  rowLabelGroup: { flex: 1 },
+  rowLabelGroup: { flex: 1, paddingRight: spacing[3] },
   rowLabel: { fontSize: fontSize.md, color: t.textPrimary },
   rowSubLabel: { fontSize: fontSize.sm, color: t.textMuted, marginTop: 2 },
   rowValue: { fontSize: fontSize.md, color: t.textSecondary, maxWidth: 200 },
   rowChevron: { fontSize: fontSize.xl, color: t.textMuted, lineHeight: 22 },
 
-  rangeInputs: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  rangeInput: {
-    backgroundColor: t.bgCard, borderRadius: radius.sm,
-    paddingHorizontal: spacing[3], paddingVertical: spacing[1],
-    fontSize: fontSize.md, fontWeight: String(fontWeight.semibold) as any,
-    color: t.textPrimary, textAlign: 'center', width: 44,
+  optimalInputWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  optimalInput: {
+    backgroundColor: t.bgCard, borderRadius: radius.md,
+    paddingHorizontal: spacing[4], paddingVertical: spacing[3],
+    fontSize: fontSize.lg, fontWeight: String(fontWeight.bold) as any,
+    color: t.textPrimary, textAlign: 'center', width: 64,
     borderWidth: 1, borderColor: t.border,
   },
-  rangeDash: { fontSize: fontSize.md, color: t.textMuted },
-  rangeUnit: { fontSize: fontSize.sm, color: t.textMuted },
+  optimalUnit: { fontSize: fontSize.base, color: t.textMuted },
+
+  aboutSection: { alignItems: 'center', marginBottom: spacing[8], paddingVertical: spacing[2] },
+  aboutVersion: { fontSize: fontSize.sm, color: t.textMuted, marginBottom: spacing[1] },
+  aboutTagline: { fontSize: fontSize.base, color: t.textSecondary, textAlign: 'center' },
 
   signOutBtn: {
     borderRadius: radius.lg, paddingVertical: spacing[4],
@@ -270,8 +258,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,97,109,0.08)',
   },
   signOutText: {
-    fontSize: fontSize.md,
-    fontWeight: String(fontWeight.semibold) as any,
+    fontSize: fontSize.md, fontWeight: String(fontWeight.semibold) as any,
     color: tokens.color.error[400],
   },
 
@@ -286,11 +273,9 @@ const s = StyleSheet.create({
     borderRadius: radius.full, alignSelf: 'center', marginBottom: spacing[5],
   },
   sheetTitle: {
-    fontSize: fontSize['2xl'],
-    fontWeight: String(fontWeight.bold) as any,
+    fontSize: fontSize['2xl'], fontWeight: String(fontWeight.bold) as any,
     color: t.textPrimary, marginBottom: spacing[5],
   },
-
   fieldGroup: { backgroundColor: t.bgCard, borderRadius: radius.lg, marginBottom: spacing[5] },
   fieldRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -301,7 +286,6 @@ const s = StyleSheet.create({
     fontSize: fontSize.md, fontWeight: String(fontWeight.semibold) as any,
     color: t.textPrimary, textAlign: 'right', flex: 1, marginLeft: spacing[4],
   },
-
   saveBtn: {
     backgroundColor: t.textPrimary, borderRadius: radius.md,
     height: component.button.heightLg,
@@ -313,12 +297,10 @@ const s = StyleSheet.create({
   },
   cancelBtn: { alignItems: 'center', padding: spacing[3] },
   cancelBtnText: { fontSize: fontSize.md, color: t.textSecondary },
-
   successState: { alignItems: 'center', paddingVertical: spacing[8] },
   successIcon: { fontSize: 48, color: tokens.color.success[500], marginBottom: spacing[3] },
   successText: {
-    fontSize: fontSize['2xl'],
-    fontWeight: String(fontWeight.bold) as any,
+    fontSize: fontSize['2xl'], fontWeight: String(fontWeight.bold) as any,
     color: t.textPrimary,
   },
 });

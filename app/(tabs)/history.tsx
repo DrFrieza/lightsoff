@@ -438,11 +438,11 @@ const s = StyleSheet.create({
   },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: {
-    width: '14.28%', aspectRatio: 1,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: radius.md, padding: 2,
-  },
+cell: {
+  width: '14.28%', aspectRatio: 1,
+  alignItems: 'center', justifyContent: 'center',
+  borderRadius: radius.md,
+},
   cellEmpty: { width: '14.28%', aspectRatio: 1 },
   cellDefault: {},
   cellToday: { borderWidth: 1, borderColor: t.border, backgroundColor: t.bgCard },

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Animated,
   AppState,
@@ -10,7 +11,6 @@ import {
   Text, TouchableOpacity,
   View
 } from 'react-native';
-
 import { supabase } from '../../lib/supabase';
 import tokens from '../../lib/tokens';
 
@@ -36,26 +36,26 @@ export default function TonightScreen() {
   const switcherAnim = useRef(new Animated.Value(600)).current;
   const timerRef = useRef<any>(null);
 
-useEffect(() => {
-  if (lightsOffTime && !asleepTime) {
-    const update = () => {
-      setElapsed(Math.floor((Date.now() - lightsOffTime.getTime()) / 1000));
-    };
-    update();
-    timerRef.current = setInterval(update, 1000);
+  useFocusEffect(useCallback(() => {
+    loadChildren();
+    return () => {};
+  }, []));
 
-    const sub = AppState.addEventListener('change', state => {
-      if (state === 'active') update();
-    });
-
-    return () => {
+  useEffect(() => {
+    if (lightsOffTime && !asleepTime) {
+      const update = () => {
+        setElapsed(Math.floor((Date.now() - lightsOffTime.getTime()) / 1000));
+      };
+      update();
+      timerRef.current = setInterval(update, 1000);
+      const sub = AppState.addEventListener('change', state => {
+        if (state === 'active') update();
+      });
+      return () => { clearInterval(timerRef.current); sub.remove(); };
+    } else {
       clearInterval(timerRef.current);
-      sub.remove();
-    };
-  } else {
-    clearInterval(timerRef.current);
-  }
-}, [lightsOffTime, asleepTime]);
+    }
+  }, [lightsOffTime, asleepTime]);
 
   const loadChildren = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -64,7 +64,7 @@ useEffect(() => {
       .from('children').select('*').eq('user_id', user.id).order('created_at');
     if (data && data.length > 0) {
       setChildren(data);
-      setActiveChild(prev => prev ? data.find(c => c.id === prev.id) || data[0] : data[0]);
+      setActiveChild(prev => prev ? (data.find(c => c.id === prev.id) || data[0]) : data[0]);
     } else {
       const { data: newChild } = await supabase
         .from('children')
@@ -142,7 +142,7 @@ useEffect(() => {
   const secs = String(elapsed % 60).padStart(2, '0');
   const today = new Date().toLocaleDateString([], { day: 'numeric', month: 'long', weekday: 'long' });
   const headerFaded = !!lightsOffTime && !saved;
-  const isOptimal = latency !== null && latency <= 25;
+  const isOptimal = latency !== null && latency <= 20;
 
   return (
     <SafeAreaView style={s.container}>
@@ -154,8 +154,6 @@ useEffect(() => {
             <Text style={[s.heading, headerFaded && s.textFaded]}>Tonight</Text>
             <Text style={[s.date, headerFaded && s.textMoreFaded]}>{today}</Text>
           </View>
-
-          {/* Child pill — only show if more than 1 child */}
           {children.length > 1 && activeChild && (
             <TouchableOpacity style={s.childPill} onPress={openSwitcher} activeOpacity={0.7}>
               <Text style={s.childPillText}>{activeChild.name}</Text>
@@ -179,7 +177,6 @@ useEffect(() => {
 
         {/* Buttons */}
         <View style={s.buttonGroup}>
-          {/* Lights Off — disabled style once tapped */}
           <TouchableOpacity
             style={[s.actionBtn, lightsOffTime ? s.actionBtnDisabled : s.actionBtnActive]}
             onPress={() => !lightsOffTime && setLightsOffTime(new Date())}
@@ -200,7 +197,6 @@ useEffect(() => {
             <Text style={[s.btnSub, lightsOffTime && { color: t.textMuted }]}>bed time</Text>
           </TouchableOpacity>
 
-          {/* Asleep */}
           <TouchableOpacity
             style={[
               s.actionBtn,
@@ -259,6 +255,7 @@ useEffect(() => {
         >
           <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
             <View style={s.sheetHandle} />
+
             {latency !== null && (
               <View style={s.resultRow}>
                 <Text style={s.resultNum}>{latency}</Text>
@@ -270,22 +267,29 @@ useEffect(() => {
                 <Text style={s.optimalText}>Optimal time — well done</Text>
               </View>
             )}
+
+            {/* Swapped: Asleep first, then Lights off */}
             <View style={s.timeRows}>
               {asleepTime && (
                 <View style={s.timeRow}>
-                  <Text style={s.timeRowLabel}>🔒  Asleep</Text>
+                  <Text style={s.timeRowLabel}>Asleep</Text>
                   <Text style={s.timeRowValue}>{formatTime(asleepTime)}</Text>
                 </View>
               )}
               {lightsOffTime && (
                 <View style={[s.timeRow, { borderBottomWidth: 0 }]}>
-                  <Text style={s.timeRowLabel}>🔒  Lights off</Text>
+                  <Text style={s.timeRowLabel}>Lights off</Text>
                   <Text style={s.timeRowValue}>{formatTime(lightsOffTime)}</Text>
                 </View>
               )}
             </View>
+
             <Text style={s.tagsLabel}>Events</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing[5] }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: spacing[8] }}
+            >
               <View style={s.tagRow}>
                 {TAGS.map(tag => (
                   <TouchableOpacity
@@ -299,6 +303,7 @@ useEffect(() => {
                 ))}
               </View>
             </ScrollView>
+
             <TouchableOpacity style={s.saveBtn} onPress={saveEntry} disabled={saving}>
               <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save'}</Text>
             </TouchableOpacity>
@@ -309,10 +314,13 @@ useEffect(() => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Child Switcher Sheet */}
+      {/* Child Switcher */}
       <Modal visible={switcherVisible} transparent animationType="none" onRequestClose={closeSwitcher}>
         <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={closeSwitcher} />
-        <Animated.View style={[s.sheet, { position: 'absolute', bottom: 0, left: 0, right: 0, transform: [{ translateY: switcherAnim }] }]}>
+        <Animated.View style={[s.sheet, {
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          transform: [{ translateY: switcherAnim }],
+        }]}>
           <View style={s.sheetHandle} />
           <Text style={s.switcherTitle}>Switch child</Text>
           <View style={s.switcherList}>
@@ -343,7 +351,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: t.bg },
   inner: { flex: 1, paddingHorizontal: spacing[6], paddingTop: spacing[5], paddingBottom: spacing[3] },
 
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 0 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   heading: { fontSize: fontSize['4xl'], fontWeight: String(fontWeight.bold) as any, color: t.textPrimary, letterSpacing: -0.5 },
   date: { fontSize: fontSize.base, color: t.textSecondary, marginTop: spacing[1] },
   textFaded: { color: 'rgba(255,255,255,0.2)' },
@@ -353,8 +361,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: t.bgCard, borderRadius: radius.full,
     paddingHorizontal: spacing[4], paddingVertical: spacing[2],
-    borderWidth: 1, borderColor: t.border,
-    marginTop: spacing[1],
+    borderWidth: 1, borderColor: t.border, marginTop: spacing[1],
   },
   childPillText: { fontSize: fontSize.base, color: t.textPrimary, fontWeight: String(fontWeight.medium) as any },
   childPillChevron: { fontSize: fontSize.lg, color: t.textSecondary, lineHeight: 20 },
