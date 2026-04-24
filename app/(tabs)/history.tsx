@@ -15,33 +15,25 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { formatTimeInput } from '../../lib/inputFormatters';
 import { supabase } from '../../lib/supabase';
+import tokens from '../../lib/tokens';
 import { BedtimeEntry } from '../../lib/types';
 
-const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const TAGS = ['Sick', 'Travel', 'Visitors', 'Night out'];
+const t = tokens.semantic.dark;
+const { spacing, radius, fontSize, fontWeight, motion, component } = tokens;
 
-const THEME = {
-  bg: '#0c0c0e',
-  surface: '#1c1c1e',
-  surfaceHigh: '#2c2c2e',
-  border: 'rgba(255,255,255,0.08)',
-  borderActive: 'rgba(255,255,255,0.22)',
-  textPrimary: '#ffffff',
-  textSecondary: 'rgba(255,255,255,0.45)',
-  textDisabled: 'rgba(255,255,255,0.15)',
-  green: '#30d158',
-  red: '#ff453a',
-  amber: '#ffd60a',
-};
+const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const MONTHS = ['January','February','March','April','May','June',
+  'July','August','September','October','November','December'];
+const TAGS = ['Sick', 'Travel', 'Visitors', 'Night out'];
 
 type ColorKey = 'green' | 'amber' | 'red';
 
-const COLORS: Record<ColorKey, { bg: string; border: string; text: string }> = {
+const ENTRY_COLORS: Record<ColorKey, { bg: string; border: string; text: string }> = {
   green: { bg: '#0D3D2A', border: '#1D9E75', text: '#5DCAA5' },
   amber: { bg: '#3D2A05', border: '#EF9F27', text: '#FAC775' },
-  red:   { bg: '#3D0D0D', border: '#E24B4A', text: '#F09595' },
+  red:   { bg: '#3D0D0D', border: tokens.color.error[500], text: '#F09595' },
 };
 
 const latencyColor = (min: number): ColorKey =>
@@ -122,11 +114,15 @@ export default function HistoryScreen() {
       setEditTags([]);
     }
     setSheetVisible(true);
-    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 65, friction: 11 }).start();
+    Animated.spring(slideAnim, {
+      toValue: 0, useNativeDriver: true, tension: 65, friction: 11,
+    }).start();
   };
 
   const closeSheet = () => {
-    Animated.timing(slideAnim, { toValue: 600, duration: 250, useNativeDriver: true }).start(() => {
+    Animated.timing(slideAnim, {
+      toValue: 600, duration: motion.duration.normal, useNativeDriver: true,
+    }).start(() => {
       setSheetVisible(false);
       setSelectedDay(null);
     });
@@ -150,9 +146,7 @@ export default function HistoryScreen() {
       const lightsOffISO = parseTimeToISO(selectedDay, editLightsOff);
       const asleepISO = editAsleep ? parseTimeToISO(selectedDay, editAsleep) : null;
       const { error } = await supabase.from('bedtime_entries').upsert({
-        user_id: userId,
-        child_id: childId,
-        date: selectedDay,
+        user_id: userId, child_id: childId, date: selectedDay,
         lights_off_time: lightsOffISO,
         asleep_time: asleepISO,
         tags: editTags,
@@ -199,7 +193,6 @@ export default function HistoryScreen() {
   const selectedEntry = selectedDay ? entries[selectedDay] : null;
   const selectedLatency = selectedEntry ? calcLatency(selectedEntry) : null;
 
-  // Stats
   const allEntries = Object.values(entries);
   const withLatency = allEntries.map(e => calcLatency(e)).filter((l): l is number => l !== null);
   const avg = withLatency.length
@@ -215,16 +208,16 @@ export default function HistoryScreen() {
     });
   });
   const worstTag = Object.entries(tagLatency)
-    .map(([tag, lats]) => ({ tag, avg: Math.round(lats.reduce((a, b) => a + b, 0) / lats.length) }))
+    .map(([tag, lats]) => ({
+      tag, avg: Math.round(lats.reduce((a, b) => a + b, 0) / lats.length)
+    }))
     .sort((a, b) => b.avg - a.avg)[0];
 
   return (
     <SafeAreaView style={s.container}>
       <ScrollView contentContainerStyle={s.scroll}>
-
         <Text style={s.heading}>History</Text>
 
-        {/* Stats bar */}
         {withLatency.length > 0 && (
           <View style={s.statsBar}>
             <View style={s.statItem}>
@@ -240,7 +233,9 @@ export default function HistoryScreen() {
               <>
                 <View style={s.statDivider} />
                 <View style={s.statItem}>
-                  <Text style={[s.statValue, { color: THEME.red }]}>{worstTag.tag}</Text>
+                  <Text style={[s.statValue, { color: tokens.color.error[400] }]}>
+                    {worstTag.tag}
+                  </Text>
                   <Text style={s.statLabel}>Avoid tag</Text>
                 </View>
               </>
@@ -248,7 +243,6 @@ export default function HistoryScreen() {
           </View>
         )}
 
-        {/* Month nav */}
         <View style={s.monthNav}>
           <TouchableOpacity onPress={prevMonth} style={s.navBtn}>
             <Text style={s.arrow}>‹</Text>
@@ -259,14 +253,12 @@ export default function HistoryScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Day headers */}
         <View style={s.dayHeaders}>
           {DAYS.map(d => <Text key={d} style={s.dayHeader}>{d}</Text>)}
         </View>
 
-        {/* Calendar grid */}
         {loading ? (
-          <ActivityIndicator color={THEME.textSecondary} style={{ marginTop: 40 }} />
+          <ActivityIndicator color={t.textMuted} style={{ marginTop: spacing[10] }} />
         ) : (
           <View style={s.grid}>
             {cells.map((day, i) => {
@@ -275,7 +267,7 @@ export default function HistoryScreen() {
               const entry = entries[key];
               const latency = entry ? calcLatency(entry) : null;
               const colorKey = latency !== null ? latencyColor(latency) : null;
-              const color = colorKey ? COLORS[colorKey] : null;
+              const color = colorKey ? ENTRY_COLORS[colorKey] : null;
               const isToday = key === todayKey;
               return (
                 <TouchableOpacity
@@ -284,9 +276,7 @@ export default function HistoryScreen() {
                     s.cell,
                     color
                       ? { backgroundColor: color.bg, borderColor: color.border, borderWidth: 1 }
-                      : isToday
-                        ? s.cellToday
-                        : s.cellDefault,
+                      : isToday ? s.cellToday : s.cellDefault,
                   ]}
                   onPress={() => openSheet(key)}
                   activeOpacity={0.7}
@@ -295,9 +285,7 @@ export default function HistoryScreen() {
                     s.dayNum,
                     color
                       ? { color: color.text }
-                      : isToday
-                        ? { color: THEME.textPrimary }
-                        : { color: THEME.textSecondary }
+                      : isToday ? { color: t.textPrimary } : { color: t.textSecondary },
                   ]}>
                     {day}
                   </Text>
@@ -307,11 +295,10 @@ export default function HistoryScreen() {
           </View>
         )}
 
-        {/* Legend */}
         <View style={s.legend}>
           {(['green', 'amber', 'red'] as ColorKey[]).map((key) => (
             <View key={key} style={s.legendItem}>
-              <View style={[s.legendDot, { backgroundColor: COLORS[key].border }]} />
+              <View style={[s.legendDot, { backgroundColor: ENTRY_COLORS[key].border }]} />
               <Text style={s.legendText}>
                 {key === 'green' ? '≤20 min' : key === 'amber' ? '21–35 min' : '35+ min'}
               </Text>
@@ -322,7 +309,6 @@ export default function HistoryScreen() {
         <Text style={s.hint}>Tap any day to add or edit</Text>
       </ScrollView>
 
-      {/* Bottom Sheet */}
       <Modal visible={sheetVisible} transparent animationType="none" onRequestClose={closeSheet}>
         <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={closeSheet} />
         <KeyboardAvoidingView
@@ -360,10 +346,11 @@ export default function HistoryScreen() {
                 <TextInput
                   style={s.timeInput}
                   value={editLightsOff}
-                  onChangeText={setEditLightsOff}
-                  placeholder="e.g. 19:30"
-                  placeholderTextColor={THEME.textDisabled}
-                  keyboardType="numbers-and-punctuation"
+                  onChangeText={(v) => setEditLightsOff(formatTimeInput(editLightsOff, v))}
+                  placeholder="19:30"
+                  placeholderTextColor={t.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={5}
                 />
               </View>
               <View style={[s.timeRow, { borderBottomWidth: 0 }]}>
@@ -371,10 +358,11 @@ export default function HistoryScreen() {
                 <TextInput
                   style={s.timeInput}
                   value={editAsleep}
-                  onChangeText={setEditAsleep}
-                  placeholder="e.g. 19:52"
-                  placeholderTextColor={THEME.textDisabled}
-                  keyboardType="numbers-and-punctuation"
+                  onChangeText={(v) => setEditAsleep(formatTimeInput(editAsleep, v))}
+                  placeholder="19:52"
+                  placeholderTextColor={t.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={5}
                 />
               </View>
             </View>
@@ -388,13 +376,17 @@ export default function HistoryScreen() {
                   onPress={() => toggleTag(tag)}
                 >
                   {editTags.includes(tag) && <Text style={s.tagCheck}>✓ </Text>}
-                  <Text style={[s.tagText, editTags.includes(tag) && s.tagTextActive]}>{tag}</Text>
+                  <Text style={[s.tagText, editTags.includes(tag) && s.tagTextActive]}>
+                    {tag}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             <TouchableOpacity style={s.saveBtn} onPress={saveSheet} disabled={saving}>
-              <Text style={s.saveBtnText}>{saving ? 'Saving...' : selectedEntry ? 'Update' : 'Save night'}</Text>
+              <Text style={s.saveBtnText}>
+                {saving ? 'Saving...' : selectedEntry ? 'Update' : 'Save night'}
+              </Text>
             </TouchableOpacity>
           </Animated.View>
         </KeyboardAvoidingView>
@@ -404,65 +396,139 @@ export default function HistoryScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.bg },
-  scroll: { padding: 24, paddingTop: 48, paddingBottom: 60 },
-  heading: { fontSize: 34, fontWeight: '700', color: THEME.textPrimary, marginBottom: 20 },
+  container: { flex: 1, backgroundColor: t.bg },
+  scroll: { padding: spacing[6], paddingTop: spacing[12], paddingBottom: spacing[14] },
+  heading: {
+    fontSize: fontSize['4xl'],
+    fontWeight: String(fontWeight.bold) as any,
+    color: t.textPrimary, marginBottom: spacing[5],
+  },
 
-  statsBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 32, paddingVertical: 4 },
+  statsBar: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing[8] },
   statItem: { flex: 1 },
-  statValue: { fontSize: 20, fontWeight: '700', color: THEME.textPrimary, marginBottom: 4 },
-  statLabel: { fontSize: 13, color: THEME.textSecondary },
-  statDivider: { width: 0.5, height: 36, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: 16 },
+  statValue: {
+    fontSize: fontSize['2xl'],
+    fontWeight: String(fontWeight.bold) as any,
+    color: t.textPrimary, marginBottom: spacing[1],
+  },
+  statLabel: { fontSize: fontSize.sm, color: t.textSecondary },
+  statDivider: {
+    width: 0.5, height: 36,
+    backgroundColor: t.divider, marginHorizontal: spacing[4],
+  },
 
-  monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  navBtn: { padding: 8 },
-  arrow: { fontSize: 32, color: THEME.textSecondary, lineHeight: 36 },
-  monthLabel: { fontSize: 17, fontWeight: '600', color: THEME.textPrimary },
+  monthNav: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: spacing[5],
+  },
+  navBtn: { padding: spacing[2] },
+  arrow: { fontSize: 32, color: t.textSecondary, lineHeight: 36 },
+  monthLabel: {
+    fontSize: fontSize.lg,
+    fontWeight: String(fontWeight.semibold) as any,
+    color: t.textPrimary,
+  },
 
-  dayHeaders: { flexDirection: 'row', marginBottom: 8 },
-  dayHeader: { flex: 1, textAlign: 'center', fontSize: 11, color: THEME.textDisabled, fontWeight: '600', textTransform: 'uppercase' },
+  dayHeaders: { flexDirection: 'row', marginBottom: spacing[2] },
+  dayHeader: {
+    flex: 1, textAlign: 'center', fontSize: fontSize.xs,
+    color: t.textMuted,
+    fontWeight: String(fontWeight.semibold) as any,
+    textTransform: 'uppercase',
+  },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12, padding: 2 },
+  cell: {
+    width: '14.28%', aspectRatio: 1,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: radius.md, padding: 2,
+  },
   cellEmpty: { width: '14.28%', aspectRatio: 1 },
-  cellDefault: { },
-  cellToday: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: THEME.surface },
-  dayNum: { fontSize: 15, fontWeight: '500' },
+  cellDefault: {},
+  cellToday: { borderWidth: 1, borderColor: t.border, backgroundColor: t.bgCard },
+  dayNum: { fontSize: fontSize.base, fontWeight: String(fontWeight.medium) as any },
 
-  legend: { flexDirection: 'row', gap: 16, marginTop: 20, marginBottom: 8, justifyContent: 'center' },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 7, height: 7, borderRadius: 4 },
-  legendText: { fontSize: 12, color: THEME.textSecondary },
-  hint: { textAlign: 'center', color: THEME.textDisabled, fontSize: 13, marginTop: 8 },
+  legend: {
+    flexDirection: 'row', gap: spacing[4],
+    marginTop: spacing[5], marginBottom: spacing[2], justifyContent: 'center',
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  legendDot: { width: 7, height: 7, borderRadius: radius.full },
+  legendText: { fontSize: fontSize.sm, color: t.textSecondary },
+  hint: { textAlign: 'center', color: t.textMuted, fontSize: fontSize.sm, marginTop: spacing[2] },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {
-    backgroundColor: THEME.surface,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingBottom: 48,
+    backgroundColor: t.bgShell,
+    borderTopLeftRadius: radius['2xl'], borderTopRightRadius: radius['2xl'],
+    padding: spacing[6], paddingBottom: spacing[12],
   },
-  sheetHandle: { width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sheetDate: { fontSize: 17, fontWeight: '600', color: THEME.textPrimary },
-  deleteText: { fontSize: 14, color: THEME.red },
+  sheetHandle: {
+    width: 36, height: 4, backgroundColor: t.border,
+    borderRadius: radius.full, alignSelf: 'center', marginBottom: spacing[5],
+  },
+  sheetHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: spacing[4],
+  },
+  sheetDate: {
+    fontSize: fontSize.lg,
+    fontWeight: String(fontWeight.semibold) as any,
+    color: t.textPrimary,
+  },
+  deleteText: { fontSize: fontSize.base, color: tokens.color.error[400] },
 
-  resultRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 20 },
-  resultNum: { fontSize: 48, fontWeight: '700', color: THEME.textPrimary, letterSpacing: -2 },
-  resultUnit: { fontSize: 18, color: THEME.textSecondary, marginLeft: 4 },
+  resultRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: spacing[5] },
+  resultNum: {
+    fontSize: fontSize['6xl'],
+    fontWeight: String(fontWeight.bold) as any,
+    color: t.textPrimary, letterSpacing: -2,
+  },
+  resultUnit: { fontSize: fontSize.xl, color: t.textSecondary, marginLeft: spacing[1] },
 
-  timeRows: { backgroundColor: THEME.surfaceHigh, borderRadius: 14, marginBottom: 20 },
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.06)' },
-  timeRowLabel: { fontSize: 15, color: THEME.textSecondary },
-  timeInput: { fontSize: 15, fontWeight: '600', color: THEME.textPrimary, textAlign: 'right', minWidth: 80 },
+  timeRows: { backgroundColor: t.bgCard, borderRadius: radius.lg, marginBottom: spacing[5] },
+  timeRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: spacing[4], borderBottomWidth: 0.5, borderBottomColor: t.divider,
+  },
+  timeRowLabel: { fontSize: fontSize.md, color: t.textSecondary },
+  timeInput: {
+    fontSize: fontSize.md,
+    fontWeight: String(fontWeight.semibold) as any,
+    color: t.textPrimary, textAlign: 'right', minWidth: 80,
+  },
 
-  tagsLabel: { fontSize: 12, color: THEME.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-  tag: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  tagActive: { backgroundColor: THEME.green, borderColor: THEME.green },
-  tagCheck: { fontSize: 13, color: '#000', fontWeight: '700' },
-  tagText: { fontSize: 14, color: THEME.textSecondary },
-  tagTextActive: { color: '#000', fontWeight: '600' },
+  tagsLabel: {
+    fontSize: fontSize.sm, color: t.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing[2],
+  },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginBottom: spacing[6] },
+  tag: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing[4], paddingVertical: spacing[2],
+    borderRadius: radius.full, borderWidth: 1, borderColor: t.border,
+  },
+  tagActive: {
+    backgroundColor: tokens.color.success[500],
+    borderColor: tokens.color.success[500],
+  },
+  tagCheck: {
+    fontSize: fontSize.sm, color: tokens.color.black,
+    fontWeight: String(fontWeight.bold) as any,
+  },
+  tagText: { fontSize: fontSize.base, color: t.textSecondary },
+  tagTextActive: {
+    color: tokens.color.black,
+    fontWeight: String(fontWeight.semibold) as any,
+  },
 
-  saveBtn: { backgroundColor: THEME.textPrimary, borderRadius: 14, padding: 16, alignItems: 'center' },
-  saveBtnText: { color: '#000', fontSize: 16, fontWeight: '700' },
+  saveBtn: {
+    backgroundColor: t.textPrimary, borderRadius: radius.md,
+    height: component.button.heightLg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  saveBtnText: {
+    color: tokens.color.black, fontSize: fontSize.md,
+    fontWeight: String(fontWeight.bold) as any,
+  },
 });
