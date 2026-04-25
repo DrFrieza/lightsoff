@@ -1,20 +1,10 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+  ActivityIndicator, Alert, Animated, Dimensions,
+  KeyboardAvoidingView, Modal, Platform, SafeAreaView,
+  ScrollView, StyleSheet, Text, TextInput,
+  TouchableOpacity, View
 } from 'react-native';
 import { formatTimeInput } from '../../lib/inputFormatters';
 import { supabase } from '../../lib/supabase';
@@ -22,13 +12,14 @@ import tokens from '../../lib/tokens';
 import { BedtimeEntry } from '../../lib/types';
 
 const CELL_SIZE = Math.floor((Dimensions.get('window').width - 48) / 7);
-
 const t = tokens.semantic.dark;
 const { spacing, radius, fontSize, fontWeight, motion, component } = tokens;
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const MONTHS = ['January','February','March','April','May','June',
-  'July','August','September','October','November','December'];
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+];
 const TAGS = ['Sick', 'Travel', 'Visitors', 'Night out'];
 
 type ColorKey = 'green' | 'amber' | 'red';
@@ -60,6 +51,10 @@ export default function HistoryScreen() {
   const [month, setMonth] = useState(today.getMonth());
   const [entries, setEntries] = useState<Record<string, BedtimeEntry>>({});
   const [loading, setLoading] = useState(true);
+  const [children, setChildren] = useState<{ id: string; name: string }[]>([]);
+  const [activeChild, setActiveChild] = useState<{ id: string; name: string } | null>(null);
+  const [switcherVisible, setSwitcherVisible] = useState(false);
+  const switcherAnim = useRef(new Animated.Value(600)).current;
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [childId, setChildId] = useState<string | null>(null);
@@ -76,21 +71,34 @@ export default function HistoryScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     setUserId(user.id);
-    const { data: children } = await supabase
-      .from('children').select('*').eq('user_id', user.id).limit(1);
-    if (children && children.length > 0) setChildId(children[0].id);
+    await loadChildren();
+  };
+
+  const loadChildren = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from('children').select('id, name')
+      .eq('user_id', user.id).order('created_at');
+    if (data && data.length > 0) {
+      setChildren(data);
+      setActiveChild(prev => prev ? (data.find(c => c.id === prev.id) || data[0]) : data[0]);
+      if (!childId) setChildId(data[0].id);
+    }
   };
 
   const loadEntries = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user || !activeChild) { setLoading(false); return; }
     const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month + 1, 0).getDate();
     const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     const { data } = await supabase
       .from('bedtime_entries').select('*')
-      .eq('user_id', user.id).gte('date', from).lte('date', to);
+      .eq('user_id', user.id)
+      .eq('child_id', activeChild.id)
+      .gte('date', from).lte('date', to);
     if (data) {
       const map: Record<string, BedtimeEntry> = {};
       data.forEach(e => { map[e.date] = e; });
@@ -100,9 +108,26 @@ export default function HistoryScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    loadEntries();
+    loadChildren();
     return () => {};
-  }, [year, month]));
+  }, []));
+
+  useEffect(() => {
+    if (activeChild) loadEntries();
+  }, [year, month, activeChild]);
+
+  const openSwitcher = () => {
+    setSwitcherVisible(true);
+    Animated.spring(switcherAnim, {
+      toValue: 0, useNativeDriver: true, tension: 65, friction: 11,
+    }).start();
+  };
+
+  const closeSwitcher = () => {
+    Animated.timing(switcherAnim, {
+      toValue: 600, duration: motion.duration.normal, useNativeDriver: true,
+    }).start(() => setSwitcherVisible(false));
+  };
 
   const openSheet = (dateKey: string) => {
     setSelectedDay(dateKey);
@@ -148,6 +173,17 @@ export default function HistoryScreen() {
     try {
       const lightsOffISO = parseTimeToISO(selectedDay, editLightsOff);
       const asleepISO = editAsleep ? parseTimeToISO(selectedDay, editAsleep) : null;
+
+      if (asleepISO && new Date(asleepISO) <= new Date(lightsOffISO)) {
+        Alert.alert(
+          'Invalid times',
+          'Asleep time must be after Lights off time.',
+          [{ text: 'OK' }]
+        );
+        setSaving(false);
+        return;
+      }
+
       const { error } = await supabase.from('bedtime_entries').upsert({
         user_id: userId, child_id: childId, date: selectedDay,
         lights_off_time: lightsOffISO,
@@ -175,6 +211,7 @@ export default function HistoryScreen() {
     ]);
   };
 
+  // Calendar calculations
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const prevMonth = () => {
@@ -196,56 +233,86 @@ export default function HistoryScreen() {
   const selectedEntry = selectedDay ? entries[selectedDay] : null;
   const selectedLatency = selectedEntry ? calcLatency(selectedEntry) : null;
 
+  // Stats
   const allEntries = Object.values(entries);
-  const withLatency = allEntries.map(e => calcLatency(e)).filter((l): l is number => l !== null);
+  const withLatency = allEntries
+    .map(e => calcLatency(e))
+    .filter((l): l is number => l !== null);
   const avg = withLatency.length
-    ? Math.round(withLatency.reduce((a, b) => a + b, 0) / withLatency.length) : null;
-  const fastest = withLatency.length ? Math.min(...withLatency) : null;
+    ? Math.round(withLatency.reduce((a, b) => a + b, 0) / withLatency.length)
+    : null;
+
+  const bestEntry = allEntries
+    .filter(e => calcLatency(e) !== null)
+    .sort((a, b) => (calcLatency(a) ?? 99) - (calcLatency(b) ?? 99))[0];
+  const bestBedtime = bestEntry
+    ? new Date(bestEntry.lights_off_time).toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit'
+      })
+    : null;
+
   const tagLatency: Record<string, number[]> = {};
   allEntries.forEach(e => {
     const l = calcLatency(e);
     if (l === null) return;
-    (e.tags || []).forEach(tag => {
-      if (!tagLatency[tag]) tagLatency[tag] = [];
-      tagLatency[tag].push(l);
-    });
+    if (e.tags && e.tags.length > 0) {
+      e.tags.forEach(tag => {
+        if (!tagLatency[tag]) tagLatency[tag] = [];
+        tagLatency[tag].push(l);
+      });
+    }
   });
-  const worstTag = Object.entries(tagLatency)
-    .map(([tag, lats]) => ({
-      tag, avg: Math.round(lats.reduce((a, b) => a + b, 0) / lats.length)
-    }))
-    .sort((a, b) => b.avg - a.avg)[0];
+  const worstTag = Object.keys(tagLatency).length > 0
+    ? Object.entries(tagLatency)
+        .map(([tag, lats]) => ({
+          tag,
+          avg: Math.round(lats.reduce((a, b) => a + b, 0) / lats.length),
+        }))
+        .sort((a, b) => b.avg - a.avg)[0]
+    : null;
 
   return (
     <SafeAreaView style={s.container}>
       <ScrollView contentContainerStyle={s.scroll}>
-        <Text style={s.heading}>History</Text>
 
+        {/* Header */}
+        <View style={s.headingRow}>
+          <Text style={s.heading}>Insights</Text>
+          {children.length > 1 && activeChild ? (
+            <TouchableOpacity style={s.childPill} onPress={openSwitcher} activeOpacity={0.7}>
+              <Text style={s.childPillText}>{activeChild.name}</Text>
+              <Text style={s.childPillChevron}>›</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {/* Stats */}
         {withLatency.length > 0 && (
           <View style={s.statsBar}>
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{bestBedtime ?? '—'}</Text>
+              <Text style={s.statLabel}>Best lights-off</Text>
+            </View>
+            <View style={s.statDivider} />
             <View style={s.statItem}>
               <Text style={s.statValue}>{avg !== null ? `${avg} min` : '—'}</Text>
               <Text style={s.statLabel}>Average</Text>
             </View>
-            <View style={s.statDivider} />
-            <View style={s.statItem}>
-              <Text style={s.statValue}>{fastest !== null ? `${fastest} min` : '—'}</Text>
-              <Text style={s.statLabel}>Fastest</Text>
-            </View>
-            {worstTag && (
+            {worstTag ? (
               <>
                 <View style={s.statDivider} />
                 <View style={s.statItem}>
-                  <Text style={[s.statValue, { color: tokens.color.error[400] }]}>
-                    {worstTag.tag}
-                  </Text>
-                  <Text style={s.statLabel}>Avoid tag</Text>
+                  <View style={s.avoidBadge}>
+                    <Text style={s.avoidBadgeText}>{worstTag.tag}</Text>
+                  </View>
+                  <Text style={s.statLabel}>Avoid</Text>
                 </View>
               </>
-            )}
+            ) : null}
           </View>
         )}
 
+        {/* Month nav */}
         <View style={s.monthNav}>
           <TouchableOpacity onPress={prevMonth} style={s.navBtn}>
             <Text style={s.arrow}>‹</Text>
@@ -256,16 +323,25 @@ export default function HistoryScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Day headers */}
         <View style={s.dayHeaders}>
           {DAYS.map(d => <Text key={d} style={s.dayHeader}>{d}</Text>)}
         </View>
 
+        {/* Grid */}
         {loading ? (
           <ActivityIndicator color={t.textMuted} style={{ marginTop: spacing[10] }} />
         ) : (
           <View style={s.grid}>
             {cells.map((day, i) => {
-              if (!day) return <View key={`e-${i}`} style={[s.cellEmpty, { width: CELL_SIZE, height: CELL_SIZE }]} />;
+              if (!day) {
+                return (
+                  <View
+                    key={`e-${i}`}
+                    style={[s.cellEmpty, { width: CELL_SIZE, height: CELL_SIZE }]}
+                  />
+                );
+              }
               const key = dateKey(day);
               const entry = entries[key];
               const latency = entry ? calcLatency(entry) : null;
@@ -274,23 +350,29 @@ export default function HistoryScreen() {
               const isToday = key === todayKey;
               return (
                 <TouchableOpacity
-  key={key}
-  style={[
-    s.cell,
-    { width: CELL_SIZE, height: CELL_SIZE },
-    color
-      ? { backgroundColor: color.bg, borderColor: color.border, borderWidth: 1 }
-      : isToday ? s.cellToday : s.cellDefault,
-  ]}
-  onPress={() => openSheet(key)}
-  activeOpacity={0.7}
->
-                  <Text style={[
-                    s.dayNum,
+                  key={key}
+                  style={[
+                    s.cell,
+                    { width: CELL_SIZE, height: CELL_SIZE },
                     color
-                      ? { color: color.text }
-                      : isToday ? { color: t.textPrimary } : { color: t.textSecondary },
-                  ]}>
+                      ? { backgroundColor: color.bg, borderColor: color.border, borderWidth: 1 }
+                      : isToday
+                        ? s.cellToday
+                        : s.cellDefault,
+                  ]}
+                  onPress={() => openSheet(key)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      s.dayNum,
+                      color
+                        ? { color: color.text }
+                        : isToday
+                          ? { color: t.textPrimary }
+                          : { color: t.textSecondary },
+                    ]}
+                  >
                     {day}
                   </Text>
                 </TouchableOpacity>
@@ -299,6 +381,7 @@ export default function HistoryScreen() {
           </View>
         )}
 
+        {/* Legend */}
         <View style={s.legend}>
           {(['green', 'amber', 'red'] as ColorKey[]).map((key) => (
             <View key={key} style={s.legendItem}>
@@ -313,6 +396,7 @@ export default function HistoryScreen() {
         <Text style={s.hint}>Tap any day to add or edit</Text>
       </ScrollView>
 
+      {/* Edit Entry Sheet */}
       <Modal visible={sheetVisible} transparent animationType="none" onRequestClose={closeSheet}>
         <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={closeSheet} />
         <KeyboardAvoidingView
@@ -326,23 +410,23 @@ export default function HistoryScreen() {
               <Text style={s.sheetDate}>
                 {selectedDay
                   ? new Date(selectedDay + 'T12:00:00').toLocaleDateString([], {
-                      weekday: 'long', month: 'long', day: 'numeric'
+                      weekday: 'long', month: 'long', day: 'numeric',
                     })
                   : ''}
               </Text>
-              {selectedEntry && (
+              {selectedEntry ? (
                 <TouchableOpacity onPress={deleteEntry}>
                   <Text style={s.deleteText}>Delete</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
             </View>
 
-            {selectedLatency !== null && (
+            {selectedLatency !== null ? (
               <View style={s.resultRow}>
                 <Text style={s.resultNum}>{selectedLatency}</Text>
                 <Text style={s.resultUnit}> min to fall asleep</Text>
               </View>
-            )}
+            ) : null}
 
             <View style={s.timeRows}>
               <View style={s.timeRow}>
@@ -379,7 +463,7 @@ export default function HistoryScreen() {
                   style={[s.tag, editTags.includes(tag) && s.tagActive]}
                   onPress={() => toggleTag(tag)}
                 >
-                  {editTags.includes(tag) && <Text style={s.tagCheck}>✓ </Text>}
+                  {editTags.includes(tag) ? <Text style={s.tagCheck}>✓ </Text> : null}
                   <Text style={[s.tagText, editTags.includes(tag) && s.tagTextActive]}>
                     {tag}
                   </Text>
@@ -395,6 +479,42 @@ export default function HistoryScreen() {
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Child Switcher */}
+      <Modal visible={switcherVisible} transparent animationType="none" onRequestClose={closeSwitcher}>
+        <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={closeSwitcher} />
+        <Animated.View
+          style={[s.sheet, {
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            transform: [{ translateY: switcherAnim }],
+          }]}
+        >
+          <View style={s.sheetHandle} />
+          <Text style={s.switcherTitle}>Switch child</Text>
+          <View style={s.switcherList}>
+            {children.map(child => {
+              const isActive = child.id === activeChild?.id;
+              return (
+                <TouchableOpacity
+                  key={child.id}
+                  style={[s.switcherRow, isActive && s.switcherRowActive]}
+                  onPress={() => {
+                    setActiveChild(child);
+                    setChildId(child.id);
+                    closeSwitcher();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.switcherName, isActive && s.switcherNameActive]}>
+                    {child.name}
+                  </Text>
+                  {isActive ? <Text style={s.switcherCheck}>✓</Text> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -402,11 +522,27 @@ export default function HistoryScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: t.bg },
   scroll: { padding: spacing[6], paddingTop: spacing[12], paddingBottom: spacing[14] },
+
+  headingRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: spacing[5],
+  },
   heading: {
     fontSize: fontSize['4xl'],
     fontWeight: String(fontWeight.bold) as any,
-    color: t.textPrimary, marginBottom: spacing[5],
+    color: t.textPrimary,
   },
+  childPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: t.bgCard, borderRadius: radius.full,
+    paddingHorizontal: spacing[4], paddingVertical: spacing[2],
+    borderWidth: 1, borderColor: t.border,
+  },
+  childPillText: {
+    fontSize: fontSize.base, color: t.textPrimary,
+    fontWeight: String(fontWeight.medium) as any,
+  },
+  childPillChevron: { fontSize: fontSize.lg, color: t.textSecondary, lineHeight: 20 },
 
   statsBar: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing[8] },
   statItem: { flex: 1 },
@@ -419,6 +555,19 @@ const s = StyleSheet.create({
   statDivider: {
     width: 0.5, height: 36,
     backgroundColor: t.divider, marginHorizontal: spacing[4],
+  },
+  avoidBadge: {
+    backgroundColor: 'rgba(255,97,109,0.15)',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    alignSelf: 'flex-start',
+    marginBottom: spacing[1],
+  },
+  avoidBadgeText: {
+    color: tokens.color.error[400],
+    fontSize: fontSize.sm,
+    fontWeight: String(fontWeight.semibold) as any,
   },
 
   monthNav: {
@@ -442,16 +591,14 @@ const s = StyleSheet.create({
   },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-cell: {
-  width: '14.28%', aspectRatio: 1,
-  alignItems: 'center', justifyContent: 'center',
-  borderRadius: radius.md,
-},
-cell: {
-  alignItems: 'center', justifyContent: 'center',
-  borderRadius: radius.md,
-},
-cellEmpty: {},
+  cell: {
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: radius.md,
+  },
+  cellEmpty: {},
+  cellDefault: {},
+  cellToday: { borderWidth: 1, borderColor: t.border, backgroundColor: t.bgCard },
+  dayNum: { fontSize: fontSize.base, fontWeight: String(fontWeight.medium) as any },
 
   legend: {
     flexDirection: 'row', gap: spacing[4],
@@ -460,7 +607,10 @@ cellEmpty: {},
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
   legendDot: { width: 7, height: 7, borderRadius: radius.full },
   legendText: { fontSize: fontSize.sm, color: t.textSecondary },
-  hint: { textAlign: 'center', color: t.textMuted, fontSize: fontSize.sm, marginTop: spacing[2] },
+  hint: {
+    textAlign: 'center', color: t.textMuted,
+    fontSize: fontSize.sm, marginTop: spacing[2],
+  },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {
@@ -536,4 +686,22 @@ cellEmpty: {},
     color: tokens.color.black, fontSize: fontSize.md,
     fontWeight: String(fontWeight.bold) as any,
   },
+
+  switcherTitle: {
+    fontSize: fontSize['2xl'], fontWeight: String(fontWeight.bold) as any,
+    color: t.textPrimary, marginBottom: spacing[5],
+  },
+  switcherList: { gap: spacing[2] },
+  switcherRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: spacing[4], borderRadius: radius.lg,
+    borderWidth: 1, borderColor: t.border, backgroundColor: t.bgCard,
+  },
+  switcherRowActive: { borderColor: t.borderFocus },
+  switcherName: {
+    fontSize: fontSize.lg, color: t.textSecondary,
+    fontWeight: String(fontWeight.medium) as any,
+  },
+  switcherNameActive: { color: t.textPrimary, fontWeight: String(fontWeight.semibold) as any },
+  switcherCheck: { fontSize: fontSize.lg, color: t.primary },
 });

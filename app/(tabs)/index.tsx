@@ -164,16 +164,37 @@ export default function TonightScreen() {
 
         {/* Timer */}
         <View style={s.timerArea}>
-          {lightsOffTime && !asleepTime ? (
-            <View style={s.timerRow}>
-              <Text style={s.timerMins}>{mins}</Text>
-              <Text style={s.timerColon}>:</Text>
-              <Text style={s.timerSecs}>{secs}</Text>
-            </View>
-          ) : (
-            <Text style={s.timerIdle}>00<Text style={s.timerIdleColon}>:</Text>00</Text>
-          )}
+  {lightsOffTime && !asleepTime ? (
+    // Counting up
+    <View style={s.timerRow}>
+      <Text style={s.timerMins}>{mins}</Text>
+      <Text style={s.timerColon}>:</Text>
+      <Text style={s.timerSecs}>{secs}</Text>
+    </View>
+  ) : asleepTime ? (
+    <View>
+      <View style={s.timerRow}>
+        <Text style={[s.timerMins, { color: 'rgba(255,255,255,0.2)' }]}>{String(Math.floor(elapsed / 60)).padStart(2, '0')}</Text>
+        <Text style={[s.timerColon, { color: 'rgba(255,255,255,0.1)' }]}>:</Text>
+        <Text style={[s.timerSecs, { color: 'rgba(255,255,255,0.15)' }]}>{String(elapsed % 60).padStart(2, '0')}</Text>
+      </View>
+      {saved ? (
+        <View style={s.savedRow}>
+          <View style={s.savedBadge}>
+            <Text style={s.savedText}>✓ Saved</Text>
+          </View>
+          <TouchableOpacity style={s.resetInline} onPress={reset}>
+            <Text style={s.resetInlineIcon}>↺</Text>
+            <Text style={s.resetInlineText}>Reset</Text>
+          </TouchableOpacity>
         </View>
+      ) : null}
+    </View>
+  ) : (
+    // Idle
+    <Text style={s.timerIdle}>00<Text style={s.timerIdleColon}>:</Text>00</Text>
+  )}
+</View>
 
         {/* Buttons */}
         <View style={s.buttonGroup}>
@@ -226,25 +247,10 @@ export default function TonightScreen() {
               I left the room
             </Text>
           </TouchableOpacity>
+          </View>
         </View>
 
-        {saved && (
-          <View style={s.savedRow}>
-            <View style={s.savedBadge}>
-              <Text style={s.savedText}>✓ Saved</Text>
-            </View>
-            <TouchableOpacity onPress={reset}>
-              <Text style={s.resetText}>Reset</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {asleepTime && !sheetVisible && !saved && (
-          <TouchableOpacity style={s.viewEntryBtn} onPress={openSheet}>
-            <Text style={s.viewEntryText}>View entry</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      
 
       {/* Entry Bottom Sheet */}
       <Modal visible={sheetVisible} transparent animationType="none" onRequestClose={closeSheet}>
@@ -390,11 +396,30 @@ const s = StyleSheet.create({
   btnLabel: { fontSize: fontSize.lg, fontWeight: String(fontWeight.semibold) as any, color: t.textPrimary },
   btnSub: { fontSize: fontSize.sm, color: t.textSecondary, marginTop: spacing[1] },
 
-  savedRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing[2] },
-  savedBadge: { backgroundColor: 'rgba(58,192,160,0.15)', borderRadius: radius.md, paddingHorizontal: spacing[4], paddingVertical: spacing[2] },
-  savedText: { color: tokens.color.success[500], fontSize: fontSize.base, fontWeight: String(fontWeight.semibold) as any },
-  resetText: { fontSize: fontSize.base, color: t.textSecondary },
-
+  savedRow: {
+  flexDirection: 'row', alignItems: 'center',
+  gap: spacing[3], marginTop: spacing[3],
+},
+savedBadge: {
+  backgroundColor: 'rgba(58,192,160,0.15)',
+  borderRadius: radius.md,
+  paddingHorizontal: spacing[4], paddingVertical: spacing[2],
+},
+savedText: {
+  color: tokens.color.success[500],
+  fontSize: fontSize.base,
+  fontWeight: String(fontWeight.semibold) as any,
+},
+resetInline: {
+  flexDirection: 'row', alignItems: 'center', gap: spacing[1],
+},
+resetInlineIcon: {
+  fontSize: fontSize.lg, color: t.textSecondary, lineHeight: 22,
+},
+resetInlineText: {
+  fontSize: fontSize.base, color: t.textSecondary,
+  fontWeight: String(fontWeight.medium) as any,
+},
   viewEntryBtn: { alignItems: 'center', paddingVertical: spacing[2] },
   viewEntryText: { fontSize: fontSize.base, color: t.textSecondary },
 
